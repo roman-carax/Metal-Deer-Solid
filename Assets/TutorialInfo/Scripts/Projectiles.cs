@@ -7,7 +7,7 @@ public class Projectile : MonoBehaviour
     
     
     public Projectile(object owner){
-        velocity = owner.Quaternion;
+
     }
 
     void Update()
