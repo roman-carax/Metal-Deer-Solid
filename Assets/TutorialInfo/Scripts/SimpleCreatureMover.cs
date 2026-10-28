@@ -1,44 +1,33 @@
 using UnityEngine;
 
-/// <summary>
-/// Self-contained character mover. Reads input, moves relative to a camera,
-/// and turns toward the direction of travel. Replaces CreatureMover +
-/// MovePlayerInput together -- remove both before adding this.
-///
-/// Design note: there is deliberately no stored "last heading". While input is
-/// held the character turns toward the current input direction; when input
-/// stops it simply stops turning and holds whatever angle it had. That is why
-/// it can settle on any angle, not just the four cardinals.
-/// </summary>
 [RequireComponent(typeof(CharacterController))]
 [DisallowMultipleComponent]
 public class SimpleCreatureMover : MonoBehaviour
 {
-    [Header("References")]
-    [Tooltip("Camera that movement is relative to. Falls back to Camera.main.")]
+    [SerializeField] private float m_FollowTurnSharpness = 10f;
     [SerializeField] private Transform m_Camera;
-    [Tooltip("Optional. Falls back to an Animator on this object.")]
+    [SerializeField] private CameraManager m_CameraManager;
     [SerializeField] private Animator m_Animator;
 
     [Header("Movement")]
     [SerializeField] private float m_WalkSpeed = 2f;
     [SerializeField] private float m_RunSpeed = 5f;
-    [Tooltip("Degrees per second the character turns toward its direction of travel.")]
+    [SerializeField] private float m_MouseSensitivity = 3f;
+
     [SerializeField, Range(0f, 1440f)] private float m_RotateSpeed = 480f;
 
     [Header("Jump and gravity")]
     [SerializeField] private float m_JumpHeight = 1.2f;
     [SerializeField] private float m_Gravity = -25f;
-    [Tooltip("Small downward push while grounded so isGrounded stays reliable.")]
+
     [SerializeField] private float m_GroundedStick = -2f;
 
     [Header("Animator parameters")]
     [SerializeField] private string m_SpeedParam = "Vert";
     [SerializeField] private string m_StateParam = "State";
-    [Tooltip("Higher blends animation values faster. 0 disables smoothing.")]
+
     [SerializeField] private float m_AnimSmoothing = 8f;
 
-    [Header("Input (legacy Input Manager only)")]
     [SerializeField] private string m_HorizontalAxis = "Horizontal";
     [SerializeField] private string m_VerticalAxis = "Vertical";
     [SerializeField] private string m_JumpButton = "Jump";
@@ -47,6 +36,7 @@ public class SimpleCreatureMover : MonoBehaviour
     private CharacterController m_Controller;
     private int m_SpeedHash;
     private int m_StateHash;
+    private float m_Yaw;
 
     private Vector2 m_Input;
     private bool m_RunHeld;
@@ -56,7 +46,7 @@ public class SimpleCreatureMover : MonoBehaviour
     private float m_AnimSpeed;
     private float m_AnimState;
 
-    // Read-only accessors in case other scripts want them.
+
     public Vector2 Input2D => m_Input;
     public bool IsRunning => m_RunHeld;
     public bool IsGrounded => m_Controller != null && m_Controller.isGrounded;
@@ -77,6 +67,7 @@ public class SimpleCreatureMover : MonoBehaviour
 
         m_SpeedHash = Animator.StringToHash(m_SpeedParam);
         m_StateHash = Animator.StringToHash(m_StateParam);
+        m_Yaw = transform.eulerAngles.y;
     }
 
     private void Update()
@@ -84,21 +75,40 @@ public class SimpleCreatureMover : MonoBehaviour
         float dt = Time.deltaTime;
 
         ReadInput();
+        bool following = m_CameraManager != null && m_CameraManager.IsFollowing;
+        Cursor.lockState = following ? CursorLockMode.Locked : CursorLockMode.None;
+        Cursor.visible = !following;
 
-        Vector3 moveDir = CameraRelativeDirection(m_Input);
-        float inputAmount = moveDir.magnitude;
-
-        // --- Rotation ---
-        // Only turn while there is meaningful input. No input means no target,
-        // so the character holds its current angle instead of snapping anywhere.
-        if (inputAmount > 0.01f)
+        Vector3 moveDir;
+        if (following)
         {
-            Quaternion desired = Quaternion.LookRotation(moveDir, Vector3.up);
-            transform.rotation = Quaternion.RotateTowards(
-                transform.rotation, desired, m_RotateSpeed * dt);
+            m_Yaw += Input.GetAxis("Mouse X") * m_MouseSensitivity;
+            Quaternion target = Quaternion.Euler(0f, m_Yaw, 0f);
+            if (m_FollowTurnSharpness > 0f)
+            {
+                float t = 1f - Mathf.Exp(-m_FollowTurnSharpness * dt);
+                transform.rotation = Quaternion.Slerp(transform.rotation, target, t);
+            }
+            else
+            {
+                transform.rotation = target;
+            }
+            moveDir = transform.rotation * new Vector3(m_Input.x, 0f, m_Input.y);
+        }
+        else
+        {
+            moveDir = CameraRelativeDirection(m_Input);
+            if (moveDir.sqrMagnitude > 0.0001f)
+            {
+                Quaternion desired = Quaternion.LookRotation(moveDir, Vector3.up);
+                transform.rotation = Quaternion.RotateTowards(
+                    transform.rotation, desired, m_RotateSpeed * dt);
+            }
+            m_Yaw = transform.eulerAngles.y;
         }
 
-        // --- Gravity and jump ---
+        
+
         if (m_Controller.isGrounded)
         {
             if (m_VerticalVelocity < 0f)
@@ -111,15 +121,14 @@ public class SimpleCreatureMover : MonoBehaviour
         {
             m_VerticalVelocity += m_Gravity * dt;
         }
+        float inputAmount = moveDir.magnitude;
 
-        // --- Displacement ---
         float speed = m_RunHeld ? m_RunSpeed : m_WalkSpeed;
         Vector3 velocity = moveDir * speed;
         velocity.y = m_VerticalVelocity;
 
         m_Controller.Move(velocity * dt);
 
-        // --- Animation ---
         UpdateAnimator(inputAmount, dt);
     }
 
