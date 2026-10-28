@@ -13,6 +13,11 @@ public class SimpleCreatureMover : MonoBehaviour
     [SerializeField] private float m_WalkSpeed = 2f;
     [SerializeField] private float m_RunSpeed = 5f;
     [SerializeField] private float m_MouseSensitivity = 3f;
+    [Header("Dash")]
+    [SerializeField] private KeyCode m_DashKey = KeyCode.Q;
+    [SerializeField] private float m_DashSpeed = 12f;     // burst strength
+    [SerializeField] private float m_DashDecay = 6f;      // how fast it fades
+    [SerializeField] private float m_DashCooldown = 0.6f;
 
     [SerializeField, Range(0f, 1440f)] private float m_RotateSpeed = 480f;
 
@@ -33,11 +38,14 @@ public class SimpleCreatureMover : MonoBehaviour
     [SerializeField] private string m_JumpButton = "Jump";
     [SerializeField] private KeyCode m_RunKey = KeyCode.LeftShift;
 
+    private DeerShooter m_DeerShooter;
     private CharacterController m_Controller;
     private int m_SpeedHash;
     private int m_StateHash;
     private float m_Yaw;
-
+    private bool m_DashPressed;
+    private Vector3 m_DashVelocity;
+    private float m_LastDashTime = -999f;
     private Vector2 m_Input;
     private bool m_RunHeld;
     private bool m_JumpPressed;
@@ -54,6 +62,7 @@ public class SimpleCreatureMover : MonoBehaviour
     private void Awake()
     {
         m_Controller = GetComponent<CharacterController>();
+        m_DeerShooter = GetComponent<DeerShooter>();
 
         if (m_Animator == null)
             m_Animator = GetComponent<Animator>();
@@ -121,10 +130,30 @@ public class SimpleCreatureMover : MonoBehaviour
         {
             m_VerticalVelocity += m_Gravity * dt;
         }
+        if (m_DashPressed && Time.time - m_LastDashTime >= m_DashCooldown)
+        {
+            Vector3 dashDir = moveDir.sqrMagnitude > 0.0001f ? moveDir : transform.forward;
+            dashDir.y = 0f;
+            m_DashVelocity = dashDir.normalized * m_DashSpeed;
+            m_LastDashTime = Time.time;
+        }
+
+        
+        m_DashVelocity = Vector3.Lerp(m_DashVelocity, Vector3.zero, 1f - Mathf.Exp(-m_DashDecay * dt));
+
         float inputAmount = moveDir.magnitude;
 
         float speed = m_RunHeld ? m_RunSpeed : m_WalkSpeed;
-        Vector3 velocity = moveDir * speed;
+        Vector3 velocity;
+        if (!m_DeerShooter.IsAiming)
+        {
+            velocity = moveDir * speed + m_DashVelocity;
+        }
+        else
+        {
+            velocity = moveDir * speed ;
+        }
+        
         velocity.y = m_VerticalVelocity;
 
         m_Controller.Move(velocity * dt);
@@ -137,16 +166,12 @@ public class SimpleCreatureMover : MonoBehaviour
         m_Input = new Vector2(Input.GetAxisRaw(m_HorizontalAxis), Input.GetAxisRaw(m_VerticalAxis));
         // Keep diagonals from being faster than straight lines.
         m_Input = Vector2.ClampMagnitude(m_Input, 1f);
-
+        m_DashPressed = Input.GetKeyDown(m_DashKey);
         m_RunHeld = Input.GetKey(m_RunKey);
         m_JumpPressed = Input.GetButtonDown(m_JumpButton);
     }
 
-    /// <summary>
-    /// Converts 2D input into a world direction on the horizontal plane,
-    /// using the camera's yaw as the frame of reference.
-    /// Read fresh every frame, so it works in fixed, tracking and follow modes.
-    /// </summary>
+    
     private Vector3 CameraRelativeDirection(Vector2 input)
     {
         if (input.sqrMagnitude < 0.0001f)
@@ -163,8 +188,7 @@ public class SimpleCreatureMover : MonoBehaviour
             forward = m_Camera.forward;
             forward.y = 0f;
 
-            // Camera aimed almost straight up or down: its forward is useless,
-            // so fall back to its up vector, which is horizontal in that case.
+
             if (forward.sqrMagnitude < 0.0001f)
             {
                 forward = m_Camera.up;

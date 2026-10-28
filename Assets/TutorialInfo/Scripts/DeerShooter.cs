@@ -16,6 +16,10 @@ public class DeerShooter : MonoBehaviour
     [SerializeField] private Transform m_FirePoint;
     [SerializeField] private LineRenderer m_Tracer;
     [SerializeField] private float m_TracerDuration = 0.08f;
+    [SerializeField] private float m_PitchSensitivity = 2f;
+    [SerializeField] private float m_MinPitch = -60f;
+    [SerializeField] private float m_MaxPitch = 60f;
+    private float m_AimPitch;
     private Coroutine m_TracerRoutine;
     private float m_LastFireTime=-999f;
     void Awake()
@@ -35,7 +39,18 @@ public class DeerShooter : MonoBehaviour
     {
         bool followingNow = m_CameraManager != null && m_CameraManager.IsFollowing;
         IsAiming = followingNow && Input.GetMouseButton(1);
+        if (IsAiming)
+        {
+            m_AimPitch -= Input.GetAxis("Mouse Y") * m_PitchSensitivity;
+            m_AimPitch = Mathf.Clamp(m_AimPitch, m_MinPitch, m_MaxPitch);
+        }
+        else
+        {
+            m_AimPitch = 0f;
+        }
 
+        if (m_CameraManager != null)
+            m_CameraManager.SetAiming(IsAiming, m_AimPitch);
         if (m_Camera != null)
         {
             float targetFov = IsAiming ? m_AimFov : m_DefaultFov;

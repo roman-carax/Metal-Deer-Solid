@@ -11,21 +11,7 @@ public class CameraLocation
     public bool trackSubject = true;
 }
 
-/// <summary>
-/// The only script that writes to the camera transform.
-///
-/// Fixed mode: the camera sits at the current marker. With Track Subject on,
-/// it stays planted there and turns every frame to keep the deer in view.
-/// With it off, it holds the marker's own angle.
-/// Follow mode: the camera chases behind the deer.
-///
-/// SwitchTo only chooses WHICH marker. The aiming happens in LateUpdate every
-/// frame on its own, so nothing needs to call SwitchTo repeatedly.
-///
-/// Every change of shot is a hard cut to where the camera should be:
-/// switching zones, entering follow mode, and leaving it (which picks the
-/// shot for wherever the deer is standing now).
-/// </summary>
+
 public class CameraManager : MonoBehaviour
 {
     [Header("References")]
@@ -53,7 +39,17 @@ public class CameraManager : MonoBehaviour
     public Vector3 followOffset = new Vector3(0f, 2f, -4f);
     public float followHeightLookOffset = 1f;
     public float followSharpness = 8f;
-    [Tooltip("Off: entering follow mode cuts straight behind the deer. On: glides there from the fixed shot.")]
+    public Transform aimEyePoint;
+    public LayerMask hidewhenAiming;
+    public float hideDistance = 0.6f;
+    public float aimNearClip = 0.05f;
+    private bool aiming;
+    private float aimPitch;
+    private Camera cam;
+    int defaultCullingMask;
+    float defaultNearClip;
+
+
     public bool blendIntoFollow = false;
     [SerializeField] private bool followMode;
 
@@ -87,12 +83,14 @@ public class CameraManager : MonoBehaviour
 
         BuildLookup();
         CheckSetup();
+        cam=cameraTransform.GetComponent<Camera>();
+        defaultCullingMask = cam.cullingMask;
+        defaultNearClip = cam.nearClipPlane;
     }
 
     void Start()
     {
-        // If this is blank, the first fixed-mode frame picks the shot for
-        // wherever the deer is standing.
+
         if (!string.IsNullOrEmpty(startLocationId))
             SwitchTo(startLocationId);
     }
@@ -152,9 +150,13 @@ public class CameraManager : MonoBehaviour
     {
         followMode = on;
     }
+    public void SetAiming(bool on, float pitch)
+    {
+        aiming = on;
+        aimPitch = pitch;
+    }
 
-    // LateUpdate: runs after every Update and after animation,
-    // so the deer has already moved this frame.
+
     void LateUpdate()
     {
         if (cameraTransform == null) return;
@@ -173,15 +175,27 @@ public class CameraManager : MonoBehaviour
 
     bool ApplyFollow()
     {
-        Vector3 desiredPos = followDeer.TransformPoint(followOffset);
-        Vector3 lookAt = followDeer.position + Vector3.up * followHeightLookOffset;
-        Vector3 toLook = lookAt - desiredPos;
-        Quaternion desiredRot = toLook.sqrMagnitude > 0.0001f
+        Vector3 desiredPos;
+        Quaternion desiredRot;
+        if (aiming && aimEyePoint != null)
+        {
+            desiredPos = aimEyePoint.position;
+            desiredRot = Quaternion.Euler(aimPitch, followDeer.eulerAngles.y, 0f);
+        }
+        else {
+            desiredPos = followDeer.TransformPoint(followOffset);
+            Vector3 lookAt = followDeer.position + Vector3.up * followHeightLookOffset;
+            Vector3 toLook = lookAt - desiredPos;
+           
+            desiredRot = toLook.sqrMagnitude > 0.0001f
             ? Quaternion.LookRotation(toLook, Vector3.up)
             : cameraTransform.rotation;
+        }
+        
+        
+        
 
-        // First frame of follow mode: cut straight behind the deer
-        // (unless blending is turned on).
+        
         bool cut = !hasApplied || (!appliedFollow && !blendIntoFollow);
 
         if (cut)
@@ -195,17 +209,33 @@ public class CameraManager : MonoBehaviour
                 Vector3.Lerp(cameraTransform.position, desiredPos, t),
                 Quaternion.Slerp(cameraTransform.rotation, desiredRot, t));
         }
-
+        UpdateFirstPersonHiding();
         hasApplied = true;
         appliedFollow = true;
         return true;
     }
+    void UpdateFirstPersonHiding()
+    {
+        if (cam == null) return;
+
+        bool close = aiming && aimEyePoint != null &&
+                     Vector3.Distance(cameraTransform.position, aimEyePoint.position) < hideDistance;
+
+        if (close)
+        {
+            cam.cullingMask = defaultCullingMask & ~hidewhenAiming;
+            cam.nearClipPlane = aimNearClip;
+        }
+        else
+        {
+            cam.cullingMask = defaultCullingMask;
+            cam.nearClipPlane = defaultNearClip;
+        }
+    }
 
     bool ApplyFixed()
     {
-        // Just came back from follow mode, or no shot chosen yet: the deer may
-        // be anywhere, so pick the shot for where it is right now instead of
-        // leaving the camera where it was.
+        UpdateFirstPersonHiding();
         bool returningFromFollow = hasApplied && appliedFollow;
         CameraLocation target = CurrentTarget();
 
