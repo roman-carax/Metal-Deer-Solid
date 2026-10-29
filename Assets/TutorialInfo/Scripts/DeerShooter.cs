@@ -19,6 +19,7 @@ public class DeerShooter : MonoBehaviour
     [SerializeField] private float m_PitchSensitivity = 2f;
     [SerializeField] private float m_MinPitch = -60f;
     [SerializeField] private float m_MaxPitch = 60f;
+    [SerializeField] private GameObject m_Reticle;
     private float m_AimPitch;
     private Coroutine m_TracerRoutine;
     private float m_LastFireTime=-999f;
@@ -51,6 +52,9 @@ public class DeerShooter : MonoBehaviour
 
         if (m_CameraManager != null)
             m_CameraManager.SetAiming(IsAiming, m_AimPitch);
+
+        if (m_Reticle != null && m_Reticle.activeSelf != IsAiming)
+            m_Reticle.SetActive(IsAiming);
         if (m_Camera != null)
         {
             float targetFov = IsAiming ? m_AimFov : m_DefaultFov;
