@@ -20,6 +20,7 @@ public class DeerShooter : MonoBehaviour
     [SerializeField] private float m_MinPitch = -60f;
     [SerializeField] private float m_MaxPitch = 60f;
     [SerializeField] private GameObject m_Reticle;
+    [SerializeField] private float m_Damage = 25f;
     private float m_AimPitch;
     private Coroutine m_TracerRoutine;
     private float m_LastFireTime=-999f;
@@ -38,8 +39,16 @@ public class DeerShooter : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        bool followingNow = m_CameraManager != null && m_CameraManager.IsFollowing;
-        IsAiming = followingNow && Input.GetMouseButton(1);
+        bool following = m_CameraManager != null && m_CameraManager.IsFollowing;
+
+        HandleAiming(following);
+        HandleFireInput(following);
+    }
+
+    private void HandleAiming(bool following)
+    {
+        IsAiming = following && Input.GetMouseButton(1);
+
         if (IsAiming)
         {
             m_AimPitch -= Input.GetAxis("Mouse Y") * m_PitchSensitivity;
@@ -55,46 +64,57 @@ public class DeerShooter : MonoBehaviour
 
         if (m_Reticle != null && m_Reticle.activeSelf != IsAiming)
             m_Reticle.SetActive(IsAiming);
+
         if (m_Camera != null)
         {
             float targetFov = IsAiming ? m_AimFov : m_DefaultFov;
             float t = 1f - Mathf.Exp(-m_AimZoomSpeed * Time.deltaTime);
             m_Camera.fieldOfView = Mathf.Lerp(m_Camera.fieldOfView, targetFov, t);
         }
-        bool following = m_CameraManager != null && m_CameraManager.IsFollowing;
-        if (Input.GetButtonDown("Fire1") && Time.time - m_LastFireTime >= m_FireCooldown)
-        {
-            
-            m_LastFireTime = Time.time;
-            Vector3 aimPoint;
-            if (following)
-            {
-                if(Physics.Raycast(m_Camera.transform.position, m_Camera.transform.forward, out RaycastHit hit, Mathf.Infinity, m_ShootableLayers, QueryTriggerInteraction.Ignore))
-                {
-                    aimPoint = hit.point;
-                }
-                else
-                {
-                    aimPoint = m_Camera.transform.position + m_Camera.transform.forward * m_Range;
-                }
-                Vector3 dir = (aimPoint - m_FirePoint.position).normalized;
-                if (Physics.Raycast(m_FirePoint.position, dir, out RaycastHit shotHit, m_Range, m_ShootableLayers, QueryTriggerInteraction.Ignore))
-                {
-                    Debug.DrawLine(m_FirePoint.position, shotHit.point, Color.red, 1f);
-                    Debug.Log("Hit: " + shotHit.collider.name);
-                    ShowTracer(m_FirePoint.position, shotHit.point);
-                }
-                else
-                {
-                    Debug.DrawRay(m_FirePoint.position, dir * m_Range, Color.yellow, 1f);
-                    ShowTracer(m_FirePoint.position, m_FirePoint.position + dir * m_Range);
-                }
-            }
-            
+    }
 
+    private void HandleFireInput(bool following)
+    {
+        if (!following) return;
+        if (!Input.GetButtonDown("Fire1")) return;
+        if (Time.time - m_LastFireTime < m_FireCooldown) return;
+
+        m_LastFireTime = Time.time;
+        Shoot();
+    }
+
+    public void Shoot()
+    {
+        Vector3 aimPoint = GetAimPoint();
+        Vector3 dir = (aimPoint - m_FirePoint.position).normalized;
+
+        if (Physics.Raycast(m_FirePoint.position, dir, out RaycastHit shotHit,
+                            m_Range, m_ShootableLayers, QueryTriggerInteraction.Ignore))
+        {
+            Debug.DrawLine(m_FirePoint.position, shotHit.point, Color.red, 1f);
+            ShowTracer(m_FirePoint.position, shotHit.point);
+
+            EnemyHealth enemy = shotHit.collider.GetComponentInParent<EnemyHealth>();
+            if (enemy != null)
+                enemy.TakeDamage(m_Damage, shotHit.point);
+            else
+                Debug.Log("Hit environment: " + shotHit.collider.name);
         }
-       
-        
+        else
+        {
+            Debug.DrawRay(m_FirePoint.position, dir * m_Range, Color.yellow, 1f);
+            ShowTracer(m_FirePoint.position, m_FirePoint.position + dir * m_Range);
+        }
+    }
+    private Vector3 GetAimPoint()
+    {
+        Transform cam = m_Camera.transform;
+
+        if (Physics.Raycast(cam.position, cam.forward, out RaycastHit hit,
+                            Mathf.Infinity, m_ShootableLayers, QueryTriggerInteraction.Ignore))
+            return hit.point;
+
+        return cam.position + cam.forward * m_Range;
     }
     private void ShowTracer(Vector3 start, Vector3 end)
     {
