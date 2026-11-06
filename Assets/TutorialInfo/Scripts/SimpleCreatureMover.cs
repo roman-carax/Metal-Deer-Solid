@@ -19,7 +19,18 @@ public class SimpleCreatureMover : MonoBehaviour
     [SerializeField] private float m_DashDecay = 6f;      // how fast it fades
     [SerializeField] private float m_DashCooldown = 0.6f;
 
+    [Header("Inertia")]
+    [SerializeField] private float m_Acceleration = 40f;       // normal: snappy
+    [SerializeField] private float m_SandeAcceleration = 4f;   // sande: slidey
+
+    [Header("Sandevistan feel")]
+    [SerializeField] private float m_SandeGravityScale = 0.5f;
+    [SerializeField] private float m_SandeDashDecay = 2f;
+    [SerializeField] private float m_Grip = 40f;     
+    [SerializeField] private float m_SandeGrip = 1f;    
+
     [SerializeField, Range(0f, 1440f)] private float m_RotateSpeed = 480f;
+    [SerializeField] private float m_FixedTurnSharpness = 8f;
 
     [Header("Jump and gravity")]
     [SerializeField] private float m_JumpHeight = 1.2f;
@@ -49,18 +60,19 @@ public class SimpleCreatureMover : MonoBehaviour
     private Vector2 m_Input;
     private bool m_RunHeld;
     private bool m_JumpPressed;
-
     private float m_VerticalVelocity;
     private float m_AnimSpeed;
     private float m_AnimState;
-
-
+    private SandevistanController m_Sande;
+    private Vector3 m_MoveVelocity;
     public Vector2 Input2D => m_Input;
     public bool IsRunning => m_RunHeld;
     public bool IsGrounded => m_Controller != null && m_Controller.isGrounded;
 
+
     private void Awake()
     {
+        m_Sande = GetComponent<SandevistanController>();
         m_Controller = GetComponent<CharacterController>();
         m_DeerShooter = GetComponent<DeerShooter>();
 
@@ -81,7 +93,12 @@ public class SimpleCreatureMover : MonoBehaviour
 
     private void Update()
     {
-        float dt = Time.deltaTime;
+        bool sande = m_Sande.SandyOn;
+        float grip = sande ? m_SandeGrip : m_Grip;
+        float accel = sande ? m_SandeAcceleration : m_Acceleration;
+        float gravity = m_Gravity * (sande ? m_SandeGravityScale : 1f);
+        float dashDecay = sande ? m_SandeDashDecay : m_DashDecay;
+        float dt = Time.deltaTime* m_Sande.PlayerTimeMultiplier;
 
         ReadInput();
         bool following = m_CameraManager != null && m_CameraManager.IsFollowing;
@@ -110,8 +127,10 @@ public class SimpleCreatureMover : MonoBehaviour
             if (moveDir.sqrMagnitude > 0.0001f)
             {
                 Quaternion desired = Quaternion.LookRotation(moveDir, Vector3.up);
-                transform.rotation = Quaternion.RotateTowards(
-                    transform.rotation, desired, m_RotateSpeed * dt);
+                float turnT = 1f - Mathf.Exp(-m_FixedTurnSharpness * dt);
+                transform.rotation = Quaternion.Slerp(transform.rotation, desired, turnT);
+
+                moveDir = transform.forward * moveDir.magnitude;
             }
             m_Yaw = transform.eulerAngles.y;
         }
@@ -128,32 +147,47 @@ public class SimpleCreatureMover : MonoBehaviour
         }
         else
         {
-            m_VerticalVelocity += m_Gravity * dt;
+            m_VerticalVelocity += gravity * dt;
         }
-        if (m_DashPressed && Time.time - m_LastDashTime >= m_DashCooldown)
+        if (m_DashPressed && Time.unscaledTime - m_LastDashTime >= m_DashCooldown)
         {
             Vector3 dashDir = moveDir.sqrMagnitude > 0.0001f ? moveDir : transform.forward;
             dashDir.y = 0f;
             m_DashVelocity = dashDir.normalized * m_DashSpeed;
-            m_LastDashTime = Time.time;
+            m_LastDashTime = Time.unscaledTime;
         }
 
-        
-        m_DashVelocity = Vector3.Lerp(m_DashVelocity, Vector3.zero, 1f - Mathf.Exp(-m_DashDecay * dt));
+
+        m_DashVelocity = Vector3.Lerp(m_DashVelocity, Vector3.zero, 1f - Mathf.Exp(-dashDecay * dt));
 
         float inputAmount = moveDir.magnitude;
 
         float speed = m_RunHeld ? m_RunSpeed : m_WalkSpeed;
-        Vector3 velocity;
-        if (!m_DeerShooter.IsAiming)
+
+        
+        Vector3 targetVel = moveDir * speed;
+        float accelT = 1f - Mathf.Exp(-accel * dt);
+        float gripT = 1f - Mathf.Exp(-grip * dt);
+
+        if (targetVel.sqrMagnitude > 0.0001f)
         {
-            velocity = moveDir * speed + m_DashVelocity;
+            Vector3 steerDir = targetVel.normalized;
+            Vector3 along = Vector3.Project(m_MoveVelocity, steerDir);   
+            Vector3 side = m_MoveVelocity - along;                      
+
+            along = Vector3.Lerp(along, targetVel, accelT);
+            side = Vector3.Lerp(side, Vector3.zero, gripT);
+
+            m_MoveVelocity = along + side;
         }
         else
         {
-            velocity = moveDir * speed ;
+            
+            m_MoveVelocity = Vector3.Lerp(m_MoveVelocity, Vector3.zero, gripT);
         }
-        
+
+        Vector3 velocity = m_DeerShooter.IsAiming ? m_MoveVelocity : m_MoveVelocity + m_DashVelocity;
+
         velocity.y = m_VerticalVelocity;
 
         m_Controller.Move(velocity * dt);
@@ -164,7 +198,6 @@ public class SimpleCreatureMover : MonoBehaviour
     private void ReadInput()
     {
         m_Input = new Vector2(Input.GetAxisRaw(m_HorizontalAxis), Input.GetAxisRaw(m_VerticalAxis));
-        // Keep diagonals from being faster than straight lines.
         m_Input = Vector2.ClampMagnitude(m_Input, 1f);
         m_DashPressed = Input.GetKeyDown(m_DashKey);
         m_RunHeld = Input.GetKey(m_RunKey);
@@ -206,7 +239,7 @@ public class SimpleCreatureMover : MonoBehaviour
     private void UpdateAnimator(float inputAmount, float dt)
     {
         if (m_Animator == null) return;
-
+        m_Animator.speed = m_Sande.PlayerTimeMultiplier;
         float targetSpeed = inputAmount * (m_RunHeld ? 1f : 0.5f);
         float targetState = m_Controller.isGrounded ? 0f : 1f;
 

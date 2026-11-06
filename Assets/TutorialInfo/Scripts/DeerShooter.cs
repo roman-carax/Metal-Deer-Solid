@@ -21,6 +21,7 @@ public class DeerShooter : MonoBehaviour
     [SerializeField] private float m_MaxPitch = 60f;
     [SerializeField] private GameObject m_Reticle;
     [SerializeField] private float m_Damage = 25f;
+    private SandevistanController m_SandevistanController; 
     private float m_AimPitch;
     private Coroutine m_TracerRoutine;
     private float m_LastFireTime=-999f;
@@ -34,6 +35,7 @@ public class DeerShooter : MonoBehaviour
             m_Tracer.useWorldSpace = true;
             m_Tracer.enabled = false;
         }
+        m_SandevistanController= GetComponent<SandevistanController>();
     }
 
 
@@ -47,6 +49,7 @@ public class DeerShooter : MonoBehaviour
 
     private void HandleAiming(bool following)
     {
+        float dt = Time.deltaTime * m_SandevistanController.PlayerTimeMultiplier;
         IsAiming = following && Input.GetMouseButton(1);
 
         if (IsAiming)
@@ -68,7 +71,7 @@ public class DeerShooter : MonoBehaviour
         if (m_Camera != null)
         {
             float targetFov = IsAiming ? m_AimFov : m_DefaultFov;
-            float t = 1f - Mathf.Exp(-m_AimZoomSpeed * Time.deltaTime);
+            float t = 1f - Mathf.Exp(-m_AimZoomSpeed * dt);
             m_Camera.fieldOfView = Mathf.Lerp(m_Camera.fieldOfView, targetFov, t);
         }
     }
@@ -77,9 +80,9 @@ public class DeerShooter : MonoBehaviour
     {
         
         if (!Input.GetButtonDown("Fire1")) return;
-        if (Time.time - m_LastFireTime < m_FireCooldown) return;
+        if (Time.unscaledTime - m_LastFireTime < m_FireCooldown) return;
 
-        m_LastFireTime = Time.time;
+        m_LastFireTime = Time.unscaledTime;
         Shoot();
     }
 

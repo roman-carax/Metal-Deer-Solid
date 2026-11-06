@@ -204,7 +204,7 @@ public class CameraManager : MonoBehaviour
         }
         else
         {
-            float t = 1f - Mathf.Exp(-followSharpness * Time.deltaTime);
+            float t = 1f - Mathf.Exp(-followSharpness * Time.unscaledDeltaTime);
             cameraTransform.SetPositionAndRotation(
                 Vector3.Lerp(cameraTransform.position, desiredPos, t),
                 Quaternion.Slerp(cameraTransform.rotation, desiredRot, t));
@@ -270,7 +270,7 @@ public class CameraManager : MonoBehaviour
                 }
                 else
                 {
-                    float t = 1f - Mathf.Exp(-trackSharpness * Time.deltaTime);
+                    float t = 1f - Mathf.Exp(-trackSharpness * Time.unscaledDeltaTime);
                     cameraTransform.rotation = Quaternion.Slerp(cameraTransform.rotation, desiredRot, t);
                 }
             }

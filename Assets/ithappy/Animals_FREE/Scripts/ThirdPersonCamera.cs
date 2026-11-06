@@ -14,7 +14,7 @@ namespace ithappy.Animals_FREE
 
         private void LateUpdate()
         {
-            Move(Time.deltaTime);
+            Move(Time.unscaledDeltaTime);
         }
 
         public override void SetInput(in Vector2 delta, float scroll)
