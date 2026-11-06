@@ -5,7 +5,7 @@ using System.Collections;
 public class DeerShooter : MonoBehaviour
 {
     [SerializeField] private float m_AimFov = 35f;        // zoomed-in field of view
-    [SerializeField] private float m_AimZoomSpeed = 12f;  // how fast it zooms in/out
+    [SerializeField] private float m_AimZoomSpeed = 12f;  
     private float m_DefaultFov;
     public bool IsAiming { get; private set; }
     [SerializeField] private LayerMask m_ShootableLayers;
@@ -36,7 +36,7 @@ public class DeerShooter : MonoBehaviour
         }
     }
 
-    // Update is called once per frame
+
     void Update()
     {
         bool following = m_CameraManager != null && m_CameraManager.IsFollowing;
@@ -75,7 +75,7 @@ public class DeerShooter : MonoBehaviour
 
     private void HandleFireInput(bool following)
     {
-        if (!following) return;
+        
         if (!Input.GetButtonDown("Fire1")) return;
         if (Time.time - m_LastFireTime < m_FireCooldown) return;
 
@@ -87,6 +87,10 @@ public class DeerShooter : MonoBehaviour
     {
         Vector3 aimPoint = GetAimPoint();
         Vector3 dir = (aimPoint - m_FirePoint.position).normalized;
+        if (!IsAiming)
+        {
+            dir = transform.forward;
+        }
 
         if (Physics.Raycast(m_FirePoint.position, dir, out RaycastHit shotHit,
                             m_Range, m_ShootableLayers, QueryTriggerInteraction.Ignore))

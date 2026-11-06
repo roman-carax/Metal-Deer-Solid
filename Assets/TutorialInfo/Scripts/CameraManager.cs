@@ -294,10 +294,7 @@ public class CameraManager : MonoBehaviour
         return location;
     }
 
-    /// <summary>
-    /// The shot that fits where the deer is right now: the zone it is standing
-    /// in, otherwise the nearest camera marker.
-    /// </summary>
+    /// where deer zone
     CameraLocation ResolveLocationForDeer()
     {
         if (followDeer == null)
@@ -347,7 +344,6 @@ public class CameraManager : MonoBehaviour
         return best;
     }
 
-    // --- Diagnostics: loud warnings for setups that make tracking silently do nothing ---
 
     void CheckSetup()
     {
@@ -412,7 +408,7 @@ public class CameraManager : MonoBehaviour
 
     void OnDrawGizmosSelected()
     {
-        // Where the "which zone is the deer in" check happens.
+        
         if (followDeer == null) return;
         Gizmos.color = Color.yellow;
         Gizmos.DrawWireSphere(followDeer.position + Vector3.up * zoneProbeHeight, 0.1f);
