@@ -8553,7 +8553,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5c20a40c29f3ead43919f2b3f50cc9c9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyHealth
-  m_MaxHealth: 100
+  m_MaxHealth: 2000
   m_DestroyOnDeath: 1
   m_DestroyDelay: 0
   m_Renderer: {fileID: 0}
@@ -8685,9 +8685,9 @@ NavMeshAgent:
   m_AgentTypeID: 0
   m_Radius: 0.5
   m_Speed: 20
-  m_Acceleration: 20
+  m_Acceleration: 200
   avoidancePriority: 50
-  m_AngularSpeed: 20
+  m_AngularSpeed: 100
   m_StoppingDistance: 2
   m_AutoTraverseOffMeshLink: 1
   m_AutoBraking: 1

@@ -16,6 +16,6 @@ public class EnemyMovement : MonoBehaviour
     void Update()
     {
         agent.destination = goal.transform.position;
-        source.pitch = 1.5f*Time.timeScale;
+        source.pitch = 1f*Time.timeScale;
     }
 }
